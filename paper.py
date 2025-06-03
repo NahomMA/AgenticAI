@@ -1,4 +1,3 @@
-# Fixed version of your ArXiv MCP server
 import arxiv
 from python_a2a.mcp import FastMCP, text_response
 from typing import List, Dict, Any
@@ -154,7 +153,7 @@ def search_benchmark_papers(query: str = "", max_results: int = 10):
             paper.tags = ["benchmark"]
             papers.append(paper)
 
-        # Convert papers to dicts and return as JSON string
+        # papers to dicts
         paper_dicts = [paper.to_dict() for paper in papers]
         return text_response(json.dumps(paper_dicts))
 
