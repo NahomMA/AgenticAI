@@ -1,18 +1,16 @@
-# arxiv_mcp_server.py
+# Fixed version of your ArXiv MCP server
 import arxiv
 from python_a2a.mcp import FastMCP, text_response
 from typing import List, Dict, Any
 from datetime import datetime
 import json
 
-# Initialize MCP server
+# Init MCP server
 mcp_server = FastMCP(
     name="ArXiv Research Tools",
     description="Tools for searching ArXiv papers on Agentic AI security topics"
 )
 
-# TODO: Define your paper data structure as a Python dataclass or dict
-# Hint: Include the fields you decided on above
 class Paper:
     def __init__(self, title: str, year: int, conference: str = None, **kwargs):
         self.title = title
@@ -25,20 +23,38 @@ class Paper:
         self.categories = kwargs.get('categories', [])
         self.tags = kwargs.get('tags', [])
         self.keywords = kwargs.get('keywords', [])
+        self.arxiv_id = kwargs.get('arxiv_id', '')
 
     def to_dict(self) -> Dict[str, Any]:
-            return {
-                'title': self.title,
-                'year': self.year,
-                'conference': self.conference,
-                'abstract': self.abstract,
-                'authors': self.authors,
-                'url': self.url,
-                'pdf_url': self.pdf_url,
-                'categories': self.categories,
-                'tags': self.tags,
-                'keywords': self.keywords
-            }
+        return {
+            'title': self.title,
+            'year': self.year,
+            'conference': self.conference,
+            'abstract': self.abstract,
+            'authors': [str(author) for author in self.authors],
+            'url': self.url,
+            'pdf_url': self.pdf_url,
+            'categories': self.categories,
+            'tags': self.tags,
+            'keywords': self.keywords,
+            'arxiv_id': self.arxiv_id
+        }
+
+def extract_paper_from_result(result) -> Paper:
+    """Helper function to extract Paper object from ArXiv result"""
+    return Paper(
+        title=result.title.strip(),
+        year=result.published.year,
+        conference=result.journal_ref if result.journal_ref else "ArXiv Preprint",
+        abstract=result.summary.strip(),
+        authors=[str(author) for author in result.authors],
+        url=result.entry_id,
+        pdf_url=result.pdf_url,
+        categories=result.categories,
+        tags=["red-team"],
+        keywords=[],
+        arxiv_id=result.entry_id.split('/')[-1]
+    )
 
 @mcp_server.tool(
     name="search_redteam_papers",
@@ -51,35 +67,28 @@ def search_redteam_papers(query: str = "", max_results: int = 10):
         query: Additional search terms (optional)
         max_results: Maximum number of papers to return
     """
-
-    base_terms = ["red team", "adversarial attack", "agent security", "agentic ai", "agentic ai security", "agentic ai red team", "agentic ai adversarial attack"]
+    base_terms = [
+        "red team", "adversarial attack", "agent security",
+        "agentic ai security", "adversarial agents",
+        "agent vulnerability", "llm attack"
+    ]
 
     search_query = " OR ".join([f'"{term}"' for term in base_terms])
     if query:
         search_query += f" AND ({query})"
 
     try:
-        # TODO: Use arxiv.Search to query papers
-        # Hint: search = arxiv.Search(query=search_query, max_results=max_results)
         search = arxiv.Search(query=search_query, max_results=max_results)
-
         papers = []
-        # TODO: Process search results and convert to Paper objects
-        # Hint: Loop through search.results() and extract relevant fields
+
         for result in search.results():
-            paper = Paper(
-                title=result.title,
-                year=result.published.year,
-                conference=result.journal_ref,
-                abstract=result.summary,
-                authors=result.authors,
-                url=result.entry_id,
-                pdf_url=result.pdf_url,
-                categories=result.categories,
-                tags=result.tags,
-                keywords=result.keywords
-            )
-        return text_response(json.dumps([paper.to_dict() for paper in papers], indent=2))
+            paper = extract_paper_from_result(result)
+            paper.tags = ["red-team"]
+            papers.append(paper)
+
+        # Convert papers to dicts and return as JSON string
+        paper_dicts = [paper.to_dict() for paper in papers]
+        return text_response(json.dumps(paper_dicts))
 
     except Exception as e:
         return text_response(f"Error searching ArXiv: {str(e)}")
@@ -92,9 +101,11 @@ def search_defense_papers(query: str = "", max_results: int = 10):
     """
     Search for defense and safety papers related to Agentic AI
     """
-    # TODO: Implement this - similar to search_redteam_papers
-    # But with defense-focused terms like "safety", "alignment", "robustness"
-    base_terms = ["safety", "alignment", 'agentic ai defense',"Agentic AI Security","robustness", "agentic ai", "agentic ai safety", "agentic ai alignment", "agentic ai robustness"]
+    base_terms = [
+        "ai safety", "agent alignment", "agentic ai defense",
+        "agent robustness", "llm safety", "agent security defense",
+        "ai alignment", "safe agents"
+    ]
 
     search_query = " OR ".join([f'"{term}"' for term in base_terms])
     if query:
@@ -103,37 +114,32 @@ def search_defense_papers(query: str = "", max_results: int = 10):
     try:
         search = arxiv.Search(query=search_query, max_results=max_results)
         papers = []
+
         for result in search.results():
-            paper = Paper(
-                title=result.title,
-                year=result.published.year,
-                conference=result.journal_ref,
-                abstract=result.summary,
-                authors=result.authors,
-                url=result.entry_id,
-                pdf_url=result.pdf_url,
-                categories=result.categories,
-                tags=result.tags,
-                keywords=result.keywords
-            )
+            paper = extract_paper_from_result(result)
+            paper.tags = ["defense"]
             papers.append(paper)
-        return text_response(json.dumps([paper.to_dict() for paper in papers], indent=2))
+
+        # Convert papers to dicts and return as JSON string
+        paper_dicts = [paper.to_dict() for paper in papers]
+        return text_response(json.dumps(paper_dicts))
 
     except Exception as e:
         return text_response(f"Error searching ArXiv: {str(e)}")
 
-# TODO: Add a tool for searching benchmark papers
-# @mcp_server.tool(name="search_benchmark_papers", ...)
-@mcp_server.tool(name="search_benchmark_papers", description="Search ArXiv for benchmark papers on Agentic AI")
+@mcp_server.tool(
+    name="search_benchmark_papers",
+    description="Search ArXiv for benchmark papers on Agentic AI"
+)
 def search_benchmark_papers(query: str = "", max_results: int = 10):
     """
     Search for benchmark papers related to Agentic AI
     """
-    base_terms = ["Agentic AI benchmark", "Agentic AI benchmarking", "Agentic AI evaluation", "Agentic AI evaluation metrics", "Agentic AI evaluation methods",
-                "Agentic AI evaluation datasets", "Agentic AI evaluation frameworks", "Agentic AI evaluation tools", "Agentic AI evaluation benchmarks",
-                "Agentic AI evaluation tools", "Agentic AI evaluation benchmarks", "Agentic AI evaluation datasets",
-                "Agentic AI evaluation frameworks", "Agentic AI evaluation tools", "Agentic AI evaluation benchmarks",
-                "Agentic AI evaluation datasets", "Agentic AI evaluation frameworks", "Agentic AI evaluation tools",]
+    base_terms = [
+        "agentic ai benchmark", "agent evaluation", "llm benchmark",
+        "agent performance metrics", "ai agent testing",
+        "multi-agent evaluation", "agent capability assessment"
+    ]
 
     search_query = " OR ".join([f'"{term}"' for term in base_terms])
     if query:
@@ -141,23 +147,16 @@ def search_benchmark_papers(query: str = "", max_results: int = 10):
 
     try:
         search = arxiv.Search(query=search_query, max_results=max_results)
-
         papers = []
+
         for result in search.results():
-            paper = Paper(
-                title=result.title,
-                year=result.published.year,
-                conference=result.journal_ref,
-                abstract=result.summary,
-                authors=result.authors,
-                url=result.entry_id,
-                pdf_url=result.pdf_url,
-                categories=result.categories,
-                tags=result.tags,
-                keywords=result.keywords
-            )
+            paper = extract_paper_from_result(result)
+            paper.tags = ["benchmark"]
             papers.append(paper)
-        return text_response(json.dumps([paper.to_dict() for paper in papers], indent=2))
+
+        # Convert papers to dicts and return as JSON string
+        paper_dicts = [paper.to_dict() for paper in papers]
+        return text_response(json.dumps(paper_dicts))
 
     except Exception as e:
         return text_response(f"Error searching ArXiv: {str(e)}")
@@ -168,5 +167,6 @@ if __name__ == "__main__":
     print("- search_redteam_papers")
     print("- search_defense_papers")
     print("- search_benchmark_papers")
-    # Run the server
+
+    #Server run
     mcp_server.run(host="0.0.0.0", port=5001)
